@@ -56,6 +56,10 @@ fn main() {
 }
 ```
 
+`Deserialize_unit_struct` can accept aliases set via `#[serde_unit_struct(alias = "...")]`.
+Multiple aliases may be specified.
+Aliases only affect deserialization; serialization always uses the struct name.
+
 ## License
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
 

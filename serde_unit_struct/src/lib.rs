@@ -25,15 +25,24 @@ mod tests {
     #[derive(Serialize_unit_struct, Deserialize_unit_struct)]
     struct Bar;
 
+    #[derive(Deserialize_unit_struct, Serialize_unit_struct)]
+    #[serde_unit_struct(alias = "LegacyBaz", alias = "OldBaz")]
+    struct Baz;
+
     #[derive(Serialize, Deserialize)]
     struct Config {
         foo: Foo,
         bar: Bar,
+        baz: Baz,
     }
 
     impl Config {
         pub fn new() -> Self {
-            Self { foo: Foo, bar: Bar }
+            Self {
+                foo: Foo,
+                bar: Bar,
+                baz: Baz,
+            }
         }
     }
 
@@ -149,6 +158,33 @@ mod tests {
     fn config_toml_bad() {
         let tml = "foo = \"Apple\"\nbar = \"Banana\"";
         let err = toml::from_str::<Config>(tml);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn deserialize_alias() {
+        // Primary name still works.
+        let _baz = serde_json::from_str::<Baz>("\"Baz\"").expect("Primary name failed");
+        // Aliases work too.
+        let _baz = serde_json::from_str::<Baz>("\"LegacyBaz\"").expect("First alias failed");
+        let _baz = serde_json::from_str::<Baz>("\"OldBaz\"").expect("Second alias failed");
+        // Aliases work in other formats too (text and binary).
+        serde_yaml::from_str::<Baz>("\"LegacyBaz\"").expect("yaml alias failed");
+        let mut buf = [0u8; 16];
+        let enc = postcard::to_slice("LegacyBaz", &mut buf).expect("postcard encode failed");
+        postcard::from_bytes::<Baz>(enc).expect("postcard alias failed");
+    }
+
+    #[test]
+    fn serialize_alias_uses_primary_name() {
+        // Alias only affects deserialization.
+        let baz = serde_json::to_string(&Baz).expect("Serializing Baz failed");
+        assert_eq!(&baz, "\"Baz\"");
+    }
+
+    #[test]
+    fn bad_alias_deserialize() {
+        let err = serde_json::from_str::<Baz>("\"NotBaz\"");
         assert!(err.is_err());
     }
 }

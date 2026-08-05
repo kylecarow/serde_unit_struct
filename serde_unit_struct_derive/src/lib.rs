@@ -27,13 +27,36 @@ pub fn serialize_derive(input: TokenStream) -> TokenStream {
 }
 
 /// Automatically derive Deserialize for the given unit struct.
-#[proc_macro_derive(Deserialize_unit_struct)]
+///
+/// Supports `#[serde_unit_struct(alias = "...")]` on the struct to accept
+/// additional string values during deserialization. Multiple aliases may be
+/// specified.
+#[proc_macro_derive(Deserialize_unit_struct, attributes(serde_unit_struct))]
 pub fn deserialize_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     // Get the name of the struct.
     let name = &input.ident;
     let name_str = LitStr::new(&name.to_string(), name.span());
+
+    // Collect any #[serde_unit_struct(alias = "...")] attributes on the struct.
+    let mut aliases: Vec<LitStr> = Vec::new();
+    for attr in &input.attrs {
+        if attr.path().is_ident("serde_unit_struct") {
+            if let Err(e) = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("alias") {
+                    let value: LitStr = meta.value()?.parse()?;
+                    aliases.push(value);
+                    Ok(())
+                } else {
+                    Err(meta.error("unknown serde_unit_struct attribute"))
+                }
+            }) {
+                return TokenStream::from(e.to_compile_error());
+            }
+        }
+    }
+
     let error_msg = LitStr::new(
         &format!("expected unit struct {}", name),
         Span::call_site().into(),
@@ -45,6 +68,11 @@ pub fn deserialize_derive(input: TokenStream) -> TokenStream {
         &format!("SerdeUnitStructDerive{}Visitor", name),
         Span::call_site().into(),
     );
+
+    // Build the value check: accept the struct name and any aliases.
+    let value_check = quote! {
+        value == #name_str #(|| value == #aliases)*
+    };
 
     // Construct the impl block.
     let deserialize_impl = quote! {
@@ -58,7 +86,7 @@ pub fn deserialize_derive(input: TokenStream) -> TokenStream {
             }
 
             fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                if value == #name_str {
+                if #value_check {
                     Ok(#name)
                 } else {
                     Err(E::custom(#error_msg))

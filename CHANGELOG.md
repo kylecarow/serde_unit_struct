@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+* Add `#[serde_unit_struct(alias = "...")]` attribute to support
+  deserialization from multiple names.
+
+
 ## v0.1.3
 * Fixed the issue in `v0.1.2`; the crate now works with all `Deserializer`s
   while still being no-std compatible.
